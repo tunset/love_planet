@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Love Planet</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #050505;
+            color: white;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden; /* Prevent scrolling */
+            touch-action: none; /* Good for 3D interactions */
+        }
+
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+
+        /* UI Overlay for the intro */
+        #intro-ui {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: radial-gradient(circle at center, #1a0b2e 0%, #000000 100%);
+            z-index: 10;
+            transition: opacity 1.5s ease-in-out;
+        }
+
+        .dialog-box {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 30px 40px;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            text-align: center;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.5);
+            max-width: 90%;
+        }
+
+        .planet-icon {
+            font-size: 40px;
+            margin-bottom: 10px;
+            animation: float 3s ease-in-out infinite;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-10px); }
+            100% { transform: translateY(0px); }
+        }
+
+        h1 {
+            font-size: 1.2rem;
+            font-weight: 500;
+            margin-bottom: 5px;
+            color: #ffb3d9;
+        }
+
+        p.subtitle {
+            font-size: 0.9rem;
+            color: #aaaaaa;
+            margin-bottom: 25px;
+        }
+
+        .btn-container {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            position: relative;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 12px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+        }
+
+        .btn-yes {
+            background: linear-gradient(45deg, #ff3366, #ff6699);
+            color: white;
+            box-shadow: 0 4px 15px rgba(255, 51, 102, 0.4);
+        }
+
+        .btn-yes:hover {
+            transform: scale(1.05);
+            background: linear-gradient(45deg, #ff4d79, #ff80b3);
+        }
+
+        .btn-no {
+            background: #333;
+            color: white;
+            position: relative; /* For the dodge effect */
+        }
+
+        /* 3D Scene Text Overlay */
+        #scene-text {
+            position: absolute;
+            top: 15%;
+            width: 100%;
+            text-align: center;
+            z-index: 5;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 2s ease-in-out 1s;
+        }
+
+        #scene-text h2 {
+            font-family: 'Brush Script MT', 'cursive', sans-serif;
+            font-size: 3rem;
+            color: #fff;
+            text-shadow: 0 0 10px #ff3366, 0 0 20px #ff3366;
+            font-weight: 400;
+            padding: 0 20px;
+        }
+
+        .hidden {
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Intro Dialog -->
+    <div id="intro-ui">
+        <div class="dialog-box">
+            <div class="planet-icon">🪐</div>
+            <h1>Love Planet</h1>
+            <p class="subtitle">A world shaped with love, just for you...</p>
+            <p style="margin-bottom: 20px; font-weight: 500;">Do you want to see my favorite person?</p>
+            
+            <div class="btn-container">
+                <button class="btn-yes" id="btn-yes">Of course 😍</button>
+                <button class="btn-no" id="btn-no">No way 😭</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main 3D Text Overlay (Appears after clicking Yes) -->
+    <div id="scene-text">
+        <!-- BRO, CHANGE HER NAME HERE 👇 -->
+        <h2>ဘာလိုလဲဘာရှာလဲ!!!
+            <br>link တွေ့တိုင်းမနှိပ်ရဘူး သားလေးရဲ့!!!
+        </h2>
+    </div>
+
+    <!-- 3D Canvas -->
+    <div id="canvas-container"></div>
+
+    <!-- Three.js Libraries (Using unpkg for better reliability) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // --- UI LOGIC (The funny button dodge + start sequence) ---
+        const btnNo = document.getElementById('btn-no');
+        const btnYes = document.getElementById('btn-yes');
+        const introUi = document.getElementById('intro-ui');
+        const sceneText = document.getElementById('scene-text');
+        let appStarted = false;
+
+        // Troll logic: Button moves away when hovering/clicking "No way"
+        btnNo.addEventListener('mouseover', moveNoButton);
+        btnNo.addEventListener('touchstart', (e) => { e.preventDefault(); moveNoButton(); });
+
+        function moveNoButton() {
+            const x = Math.random() * (window.innerWidth / 2) - window.innerWidth / 4;
+            const y = Math.random() * (window.innerHeight / 2) - window.innerHeight / 4;
+            btnNo.style.transform = `translate(${x}px, ${y}px)`;
+        }
+
+        // --- THREE.JS SCENE SETUP ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050505, 0.02); // Add some depth to the background
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        // Start camera far away for cool zoom-in effect
+        camera.position.set(0, 5, 40); 
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        container.appendChild(renderer.domElement);
+
+        // Robust initialization with fallback in case CDN gets blocked
+        let controls;
+        if (typeof THREE.OrbitControls === 'function') {
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.autoRotate = true; // Slowly rotate the scene automatically
+            controls.autoRotateSpeed = 0.5;
+            controls.enabled = false; // Disable until they click Yes
+        } else {
+            console.warn("OrbitControls failed to load from CDN. Using basic auto-rotation fallback.");
+            controls = {
+                enabled: false,
+                autoRotate: true,
+                update: function() {
+                    if (this.enabled && this.autoRotate) {
+                        // Simple manual rotation around Y axis
+                        const speed = 0.005;
+                        const x = camera.position.x;
+                        const z = camera.position.z;
+                        camera.position.x = x * Math.cos(speed) - z * Math.sin(speed);
+                        camera.position.z = z * Math.cos(speed) + x * Math.sin(speed);
+                        camera.lookAt(0, 0, 0);
+                    }
+                }
+            };
+        }
+
+        // --- GROUPS (To easily rotate parts independently) ---
+        const particleGroup = new THREE.Group();
+        const imageGroup = new THREE.Group();
+        scene.add(particleGroup);
+        scene.add(imageGroup);
+
+        // --- 1. CREATE THE MAGICAL PARTICLE PLANET ---
+        const particleCount = 6000;
+        const particleGeo = new THREE.BufferGeometry();
+        const particlePos = new Float32Array(particleCount * 3);
+        const particleColors = new Float32Array(particleCount * 3);
+
+        const color1 = new THREE.Color(0xff3366); // Pink
+        const color2 = new THREE.Color(0x9933ff); // Purple
+
+        for(let i = 0; i < particleCount; i++) {
+            // Generate points on a sphere
+            const u = Math.random();
+            const v = Math.random();
+            const theta = u * 2.0 * Math.PI;
+            const phi = Math.acos(2.0 * v - 1.0);
+            
+            // Give it some fuzzy volume (radius 5 to 6)
+            const radius = 5 + Math.random() * 1.5; 
+            
+            const x = radius * Math.sin(phi) * Math.cos(theta);
+            const y = radius * Math.sin(phi) * Math.sin(theta);
+            const z = radius * Math.cos(phi);
+
+            particlePos[i*3] = x;
+            particlePos[i*3+1] = y;
+            particlePos[i*3+2] = z;
+
+            // Mix pink and purple colors randomly
+            const mixedColor = color1.clone().lerp(color2, Math.random());
+            particleColors[i*3] = mixedColor.r;
+            particleColors[i*3+1] = mixedColor.g;
+            particleColors[i*3+2] = mixedColor.b;
+        }
+
+        particleGeo.setAttribute('position', new THREE.BufferAttribute(particlePos, 3));
+        particleGeo.setAttribute('color', new THREE.BufferAttribute(particleColors, 3));
+
+        // Create a circular sprite for particles to make them soft instead of square
+        const canvas = document.createElement('canvas');
+        canvas.width = 16;
+        canvas.height = 16;
+        const context = canvas.getContext('2d');
+        const gradient = context.createRadialGradient(8, 8, 0, 8, 8, 8);
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(1, 'rgba(255,255,255,0)');
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, 16, 16);
+        const particleTexture = new THREE.CanvasTexture(canvas);
+
+        const particleMat = new THREE.PointsMaterial({
+            size: 0.15,
+            vertexColors: true,
+            map: particleTexture,
+            transparent: true,
+            blending: THREE.AdditiveBlending,
+            depthWrite: false
+        });
+
+        const particleSphere = new THREE.Points(particleGeo, particleMat);
+        particleGroup.add(particleSphere);
+
+        // --- 1.5 BACKGROUND STARS ---
+        const starGeo = new THREE.BufferGeometry();
+        const starPos = new Float32Array(2000 * 3);
+        for(let i=0; i<2000; i++){
+            starPos[i*3] = (Math.random() - 0.5) * 100;
+            starPos[i*3+1] = (Math.random() - 0.5) * 100;
+            starPos[i*3+2] = (Math.random() - 0.5) * 100;
+        }
+        starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+        const starMat = new THREE.PointsMaterial({ color: 0x888888, size: 0.1, transparent: true, opacity: 0.6 });
+        const stars = new THREE.Points(starGeo, starMat);
+        scene.add(stars);
+
+
+        // --- 2. THE RING OF IMAGES ---
+        const textureLoader = new THREE.TextureLoader();
+        
+        // BRO, SWAP THESE URLS WITH LINKS TO HER PICS 👇
+        // You can use discord image links, imgur links, or local files if hosting.
+        const imageUrls = [
+            'Image/01.jpg',
+            'Image/03.webp',
+            'Image/78.webp',
+            'Image/532.webp',
+            'Image/download.webp',
+            'Image/1111.webp',
+            'Image/111.webp',
+            'Image/123.webp'
+        ];
+
+        const imagePlanes = [];
+        const ringRadius = 10;
+        const totalImages = imageUrls.length;
+
+        imageUrls.forEach((url, index) => {
+            textureLoader.load(url, (texture) => {
+                // Adjust plane size based on image aspect ratio if you want, using fixed square here
+                const planeGeo = new THREE.PlaneGeometry(2.5, 2.5);
+                const planeMat = new THREE.MeshBasicMaterial({ 
+                    map: texture, 
+                    side: THREE.DoubleSide,
+                    transparent: true,
+                    opacity: 0 // Start invisible, fade in later
+                });
+                const plane = new THREE.Mesh(planeGeo, planeMat);
+
+                // Position them in a circle around the planet
+                const angle = (index / totalImages) * Math.PI * 2;
+                plane.position.x = Math.cos(angle) * ringRadius;
+                // Add a little vertical wave effect so they aren't totally flat
+                plane.position.y = Math.sin(angle * 2) * 1.5; 
+                plane.position.z = Math.sin(angle) * ringRadius;
+
+                // Make planes look at the center of the planet
+                plane.lookAt(0, 0, 0);
+
+                imageGroup.add(plane);
+                imagePlanes.push(plane);
+            });
+        });
+
+        // --- ANIMATION & RENDER LOOP ---
+        const clock = new THREE.Clock();
+        
+        // Variables for the smooth zoom-in effect
+        let targetCameraZ = 40;
+        let targetCameraY = 5;
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const elapsedTime = clock.getElapsedTime();
+
+            // Rotate the particle planet slowly
+            particleGroup.rotation.y = elapsedTime * 0.1;
+            particleGroup.rotation.z = Math.sin(elapsedTime * 0.2) * 0.1; // Gentle wobble
+
+            // Rotate the image ring slightly faster
+            imageGroup.rotation.y = elapsedTime * -0.05;
+
+            // Make images bob up and down slightly
+            imagePlanes.forEach((plane, i) => {
+                const angle = (i / totalImages) * Math.PI * 2;
+                plane.position.y = Math.sin(elapsedTime * 2 + angle) * 0.5;
+            });
+
+            // Smooth camera transition when they click "Yes"
+            if (appStarted) {
+                camera.position.z += (targetCameraZ - camera.position.z) * 0.02;
+                camera.position.y += (targetCameraY - camera.position.y) * 0.02;
+                
+                // Fade in the images
+                imagePlanes.forEach(plane => {
+                    if(plane.material.opacity < 1) {
+                        plane.material.opacity += 0.01;
+                    }
+                });
+            }
+
+            if (controls) controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Handle Resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // Start it up when DOM is ready
+        window.onload = function() {
+            animate();
+
+            // Yes Button Click Logic
+            btnYes.addEventListener('click', () => {
+                appStarted = true;
+                if (controls) controls.enabled = true; // Let them drag around!
+                
+                // Set new camera targets to zoom in smoothly
+                targetCameraZ = 18; 
+                targetCameraY = 2;
+
+                // Hide the intro UI
+                introUi.classList.add('hidden');
+                
+                // Show the 3D overlay text
+                sceneText.classList.remove('hidden');
+                
+                // Slight delay before full opacity on text
+                setTimeout(() => {
+                    sceneText.style.opacity = "1";
+                }, 500);
+            });
+        };
+
+    </script>
+</body>
+</html>
